@@ -1,13 +1,21 @@
 import { cn } from "@/lib/cn";
+import { Moon, Sun, UtensilsCrossed, Utensils, type LucideIcon } from "lucide-react";
 import type { HTMLAttributes } from "react";
 
 type MealTypeIcon = "breakfast" | "lunch" | "dinner" | "default";
 
-const iconConfig: Record<MealTypeIcon, { emoji: string; bg: string }> = {
-  breakfast: { emoji: "🌅", bg: "bg-accent-50" },
-  lunch: { emoji: "☀️", bg: "bg-brand-50" },
-  dinner: { emoji: "🌙", bg: "bg-neutral-100" },
-  default: { emoji: "🍽️", bg: "bg-brand-50" },
+const mealIcons: Record<MealTypeIcon, LucideIcon> = {
+  breakfast: Sun,
+  lunch: UtensilsCrossed,
+  dinner: Moon,
+  default: Utensils,
+};
+
+const mealStyles: Record<MealTypeIcon, string> = {
+  breakfast: "bg-amber-50 text-amber-600 ring-1 ring-amber-100/80",
+  lunch: "bg-sky-50 text-sky-600 ring-1 ring-sky-100/80",
+  dinner: "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100/80",
+  default: "bg-brand-50 text-brand-600 ring-1 ring-brand-100/80",
 };
 
 type MealIconProps = HTMLAttributes<HTMLDivElement> & {
@@ -16,9 +24,9 @@ type MealIconProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 const sizeClasses = {
-  sm: "h-8 w-8 text-base",
-  md: "h-10 w-10 text-lg",
-  lg: "h-12 w-12 text-xl",
+  sm: "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4",
+  md: "h-10 w-10 [&_svg]:h-5 [&_svg]:w-5",
+  lg: "h-12 w-12 [&_svg]:h-6 [&_svg]:w-6",
 } as const;
 
 export function MealIcon({
@@ -27,20 +35,20 @@ export function MealIcon({
   className,
   ...props
 }: MealIconProps) {
-  const { emoji, bg } = iconConfig[type];
+  const Icon = mealIcons[type];
 
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg",
-        bg,
+        "flex shrink-0 items-center justify-center rounded-xl",
+        mealStyles[type],
         sizeClasses[size],
         className,
       )}
       aria-hidden="true"
       {...props}
     >
-      {emoji}
+      <Icon strokeWidth={2} />
     </div>
   );
 }
@@ -71,7 +79,7 @@ export function ProductIcon({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg bg-neutral-100",
+        "flex shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-base",
         sizeClasses[size],
         className,
       )}

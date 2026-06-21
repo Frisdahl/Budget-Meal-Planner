@@ -27,11 +27,12 @@ export function Textarea({
       <textarea
         id={textareaId}
         className={cn(
-          "min-h-[80px] w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm",
+          "min-h-[88px] w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-3 text-[15px]",
           "placeholder:text-neutral-400 resize-y",
-          "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20",
+          "transition-colors duration-200",
+          "focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/15",
           "disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:opacity-60",
-          error && "border-error focus:border-error focus:ring-error/20",
+          error && "border-error focus:border-error focus:ring-error/15",
           className,
         )}
         {...props}

@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   addProduct,
   clearChecked,
+  getShoppingItemProductKey,
   getSnapshot,
   removeItem,
   subscribe,
@@ -20,7 +21,8 @@ export function useShoppingList() {
   return {
     items,
     addProduct: add,
-    isInList: (id: string) => items.some((item) => item.id === id),
+    isInList: (id: string) =>
+      items.some((item) => getShoppingItemProductKey(item) === id),
     toggleChecked,
     updateQuantity,
     removeItem,

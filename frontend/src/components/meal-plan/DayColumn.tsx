@@ -40,7 +40,7 @@ export function DayColumn({ day, isToday = false }: DayColumnProps) {
           </p>
         ) : (
           meals.map((meal) => (
-            <MealCard key={meal.id} meal={meal} compact />
+            <MealCard key={meal.id} meal={meal} />
           ))
         )}
       </div>

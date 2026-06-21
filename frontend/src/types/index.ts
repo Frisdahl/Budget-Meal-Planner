@@ -45,6 +45,12 @@ export type ShoppingItem = {
   mealRef?: string;
   store: string;
   imageUrl?: string;
+  sourceProductId?: string;
+  requiredAmount?: number;
+  requiredUnit?: string;
+  packSize?: number;
+  packUnit?: string;
+  packsNeeded?: number;
 };
 
 export type FavoriteMeal = {

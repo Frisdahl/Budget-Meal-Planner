@@ -6,6 +6,7 @@ export { Container } from "./Container";
 export { EmptyState } from "./EmptyState";
 export { MealIcon, ProductIcon } from "./Icon";
 export { Input, SearchInput } from "./Input";
+export { Modal } from "./Modal";
 export { Pagination } from "./Pagination";
 export { ProgressBar } from "./ProgressBar";
 export { QuantitySelector } from "./QuantitySelector";

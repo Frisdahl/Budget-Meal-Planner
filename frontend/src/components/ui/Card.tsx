@@ -3,17 +3,19 @@ import type { HTMLAttributes } from "react";
 
 type CardProps = HTMLAttributes<HTMLDivElement> & {
   padding?: "none" | "sm" | "md" | "lg";
+  interactive?: boolean;
 };
 
 const paddingClasses = {
   none: "",
   sm: "p-4",
-  md: "p-5",
-  lg: "p-6",
+  md: "p-4 sm:p-5",
+  lg: "p-5 sm:p-6",
 } as const;
 
 export function Card({
   padding = "md",
+  interactive = false,
   className,
   children,
   ...props
@@ -21,7 +23,9 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg border border-neutral-200 bg-white shadow-sm",
+        "rounded-2xl border border-neutral-200 bg-white",
+        "shadow-[var(--shadow-card)]",
+        interactive && "card-interactive",
         paddingClasses[padding],
         className,
       )}
@@ -36,7 +40,7 @@ type CardHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export function CardHeader({ className, children, ...props }: CardHeaderProps) {
   return (
-    <div className={cn("mb-4 flex flex-col gap-1", className)} {...props}>
+    <div className={cn("mb-4 flex flex-col gap-1.5", className)} {...props}>
       {children}
     </div>
   );
@@ -46,7 +50,7 @@ type CardTitleProps = HTMLAttributes<HTMLHeadingElement>;
 
 export function CardTitle({ className, children, ...props }: CardTitleProps) {
   return (
-    <h3 className={cn("text-lg font-semibold text-neutral-900", className)} {...props}>
+    <h3 className={cn("text-card-title", className)} {...props}>
       {children}
     </h3>
   );
@@ -60,7 +64,7 @@ export function CardDescription({
   ...props
 }: CardDescriptionProps) {
   return (
-    <p className={cn("text-body-sm text-neutral-500", className)} {...props}>
+    <p className={cn("text-caption text-neutral-500", className)} {...props}>
       {children}
     </p>
   );

@@ -24,11 +24,16 @@ function parseUnitLabel(unit: string): string {
   return parts.length > 1 ? parts[parts.length - 1]! : unit;
 }
 
+export function getShoppingItemProductKey(item: ShoppingItem): string {
+  return item.sourceProductId ?? item.id;
+}
+
 export function productToShoppingItem(product: Product): ShoppingItem {
   const unitPrice = getEffectivePrice(product);
 
   return {
     id: product.id,
+    sourceProductId: product.id,
     name: product.name,
     brand: product.brand,
     category: product.category,
@@ -44,11 +49,13 @@ export function productToShoppingItem(product: Product): ShoppingItem {
 }
 
 export function addProduct(product: Product): void {
-  const existing = items.find((item) => item.id === product.id);
+  const existing = items.find(
+    (item) => getShoppingItemProductKey(item) === product.id,
+  );
 
   if (existing) {
     items = items.map((item) =>
-      item.id === product.id
+      item.id === existing.id
         ? { ...item, quantity: item.quantity + 1 }
         : item,
     );
@@ -60,7 +67,7 @@ export function addProduct(product: Product): void {
 }
 
 export function isInShoppingList(id: string): boolean {
-  return items.some((item) => item.id === id);
+  return items.some((item) => getShoppingItemProductKey(item) === id);
 }
 
 export function toggleChecked(id: string): void {

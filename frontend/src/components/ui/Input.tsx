@@ -18,7 +18,7 @@ export function Input({
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {label && (
         <label htmlFor={inputId} className="text-label">
           {label}
@@ -27,11 +27,12 @@ export function Input({
       <input
         id={inputId}
         className={cn(
-          "h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm",
+          "h-11 w-full rounded-xl border border-neutral-200 bg-white px-3.5 text-[15px]",
           "placeholder:text-neutral-400",
-          "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20",
+          "transition-colors duration-200",
+          "focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/15",
           "disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:opacity-60",
-          error && "border-error focus:border-error focus:ring-error/20",
+          error && "border-error focus:border-error focus:ring-error/15",
           className,
         )}
         {...props}
@@ -59,7 +60,7 @@ export function SearchInput({ className, ...props }: SearchInputProps) {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
+        className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
         aria-hidden="true"
       >
         <circle cx="11" cy="11" r="8" />
@@ -67,7 +68,7 @@ export function SearchInput({ className, ...props }: SearchInputProps) {
       </svg>
       <Input
         type="search"
-        className={cn("pl-9", className)}
+        className={cn("pl-10", className)}
         {...props}
       />
     </div>

@@ -14,6 +14,24 @@ export const DIETARY_PREFERENCES = [
 
 export type DietaryPreferenceId = (typeof DIETARY_PREFERENCES)[number]["id"];
 
+export const MEAL_PLAN_DIET_FILTERS = [
+  { key: "vegetarian", label: "Vegetar" },
+  { key: "noPork", label: "Uden svinekød" },
+  { key: "noFish", label: "Uden fisk" },
+  { key: "lactoseFree", label: "Laktosefri" },
+  { key: "glutenFree", label: "Glutenfri" },
+  { key: "nutFree", label: "Nøddefri" },
+] as const;
+
+export type MealPlanDietFilterKey =
+  (typeof MEAL_PLAN_DIET_FILTERS)[number]["key"];
+
+export function getActiveDietFilterLabels(criteria: MealPlanCriteria): string[] {
+  return MEAL_PLAN_DIET_FILTERS.filter(({ key }) => criteria[key]).map(
+    ({ label }) => label,
+  );
+}
+
 /** @deprecated Use MealPlanCriteria from @/types/mealPlan */
 export type MealPlanFormValues = MealPlanCriteria;
 
@@ -24,6 +42,12 @@ export const DEFAULT_MEAL_PLAN_CRITERIA: MealPlanCriteria = {
   store: DEFAULT_FEED_STORE,
   dietaryPreferences: [],
   allergies: "",
+  vegetarian: false,
+  noPork: false,
+  noFish: false,
+  lactoseFree: false,
+  glutenFree: false,
+  nutFree: false,
 };
 
 /** @deprecated Use DEFAULT_MEAL_PLAN_CRITERIA */

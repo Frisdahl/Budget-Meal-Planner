@@ -22,13 +22,14 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-lg border border-neutral-200 bg-white p-5 shadow-sm",
+        "flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-neutral-200 bg-white p-4 shadow-[var(--shadow-card)] sm:p-5",
+        "card-interactive",
         className,
       )}
       {...props}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <Text variant="label" as="span" className="text-neutral-500">
             {label}
           </Text>
@@ -52,7 +53,7 @@ export function StatCard({
           )}
         </div>
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100">
             {icon}
           </div>
         )}

@@ -126,6 +126,6 @@ export const breakpoints = {
 
 /* Max content width for readable layouts */
 export const layout = {
-  maxWidth: "72rem", /* 1152px */
+  maxWidth: "80rem", /* 1280px */
   headerHeight: "4rem",
 } as const;

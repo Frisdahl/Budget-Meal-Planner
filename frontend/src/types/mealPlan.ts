@@ -9,6 +9,12 @@ export type MealPlanCriteria = {
   store: FeedStore;
   dietaryPreferences: DietaryPreferenceId[];
   allergies: string;
+  vegetarian: boolean;
+  noPork: boolean;
+  noFish: boolean;
+  lactoseFree: boolean;
+  glutenFree: boolean;
+  nutFree: boolean;
 };
 
 export type MealPlanDay = {
@@ -37,11 +43,18 @@ export type GeneratedMealPlanResult = {
   source: MealPlanSource;
 };
 
-export type MealPlanSessionStatus = "idle" | "generating" | "ready" | "error";
+export type MealPlanSessionStatus =
+  | "idle"
+  | "generating"
+  | "optimizing"
+  | "ready"
+  | "error";
 
 export type MealPlanSessionState = {
   criteria: MealPlanCriteria;
   plan: GeneratedMealPlanResult | null;
   status: MealPlanSessionStatus;
   error: string | null;
+  optimizeMessage: string | null;
+  optimizationSavings: number | null;
 };

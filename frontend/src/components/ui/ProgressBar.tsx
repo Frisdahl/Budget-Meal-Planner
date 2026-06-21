@@ -7,13 +7,19 @@ type ProgressBarProps = {
   label?: string;
   showPercent?: boolean;
   variant?: "brand" | "accent" | "neutral";
+  size?: "md" | "lg";
   className?: string;
 };
 
 const barVariants = {
-  brand: "bg-brand-500",
-  accent: "bg-accent-500",
+  brand: "bg-gradient-to-r from-brand-500 to-brand-600",
+  accent: "bg-gradient-to-r from-accent-400 to-accent-500",
   neutral: "bg-neutral-400",
+} as const;
+
+const trackSizes = {
+  md: "h-2.5",
+  lg: "h-4",
 } as const;
 
 export function ProgressBar({
@@ -22,22 +28,28 @@ export function ProgressBar({
   label,
   showPercent = true,
   variant = "brand",
+  size = "md",
   className,
 }: ProgressBarProps) {
   const percent = formatPercent(value, max);
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-2.5", className)}>
       {(label || showPercent) && (
-        <div className="flex items-center justify-between text-sm">
-          {label && <span className="font-medium text-neutral-700">{label}</span>}
+        <div className="flex items-center justify-between gap-3 text-sm">
+          {label && (
+            <span className="font-medium text-neutral-700">{label}</span>
+          )}
           {showPercent && (
-            <span className="text-neutral-500">{percent}%</span>
+            <span className="tabular-nums text-neutral-500">{percent}%</span>
           )}
         </div>
       )}
       <div
-        className="h-2 w-full overflow-hidden rounded-full bg-neutral-100"
+        className={cn(
+          "w-full overflow-hidden rounded-full bg-neutral-100",
+          trackSizes[size],
+        )}
         role="progressbar"
         aria-valuenow={value}
         aria-valuemin={0}
@@ -45,7 +57,10 @@ export function ProgressBar({
         aria-label={label}
       >
         <div
-          className={cn("h-full rounded-full transition-all", barVariants[variant])}
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500 ease-out",
+            barVariants[variant],
+          )}
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
       </div>

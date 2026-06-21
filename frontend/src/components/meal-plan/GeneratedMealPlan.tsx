@@ -1,47 +1,85 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { cn } from "@/lib/cn";
 import {
   Badge,
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  ProgressBar,
   StatCard,
+  Text,
 } from "@/components/ui";
-import { MealCard } from "./MealCard";
+import { BudgetSummaryCard } from "./BudgetSummaryCard";
+import { DayPlanCard } from "./DayPlanCard";
+import { LoadingSpinner } from "./LoadingSpinner";
+import { RecipeSwapModal } from "./RecipeSwapModal";
+import {
+  getDietFilterBadgeVariant,
+} from "./badgeUtils";
 import { formatCurrency } from "@/lib/format";
 import { ROUTES } from "@/routes/paths";
+import { getActiveDietFilterLabels } from "@/data/mealPlanOptions";
+import type { MealSwapTarget } from "@/lib/recipeSwap";
+import {
+  CalendarDays,
+  ShoppingBag,
+  User,
+  UtensilsCrossed,
+} from "lucide-react";
 import type { GeneratedMealPlanResult } from "@/types/mealPlan";
 
 type GeneratedMealPlanProps = {
   plan: GeneratedMealPlanResult;
+  onMakeCheaper?: () => void;
+  onSwapMeal?: (
+    dayIndex: number,
+    mealIndex: number,
+    recipeId: string,
+  ) => Promise<void>;
+  isOptimizing?: boolean;
+  optimizeMessage?: string | null;
+  optimizationSavings?: number | null;
 };
 
-export function GeneratedMealPlan({ plan }: GeneratedMealPlanProps) {
+export function GeneratedMealPlan({
+  plan,
+  onMakeCheaper,
+  onSwapMeal,
+  isOptimizing = false,
+  optimizeMessage,
+  optimizationSavings,
+}: GeneratedMealPlanProps) {
+  const [swapTarget, setSwapTarget] = useState<MealSwapTarget | null>(null);
   const { criteria, days, summary, shoppingListItems, source } = plan;
-  const selectedPreferenceLabels = criteria.dietaryPreferences.length > 0;
+  const activeDietFilterLabels = getActiveDietFilterLabels(criteria);
+
+  function openSwapModal(dayIndex: number, mealIndex: number) {
+    const meal = days[dayIndex]?.meals[mealIndex];
+    if (!meal) return;
+    setSwapTarget({ dayIndex, mealIndex, meal });
+  }
+
+  async function handleSwapSelect(recipeId: string) {
+    if (!swapTarget || !onSwapMeal) return;
+    await onSwapMeal(swapTarget.dayIndex, swapTarget.mealIndex, recipeId);
+  }
 
   return (
-    <section className="flex flex-col gap-stack-xl" aria-label="Genereret madplan">
-      <div className="flex flex-col gap-stack-md sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-neutral-900">Din madplan</h2>
-          <p className="mt-1 text-body-sm text-neutral-500">
+    <section
+      className="flex flex-col gap-12"
+      aria-label="Genereret madplan"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <h2 className="text-section-title">Din madplan</h2>
+          <p className="max-w-2xl text-[15px] leading-relaxed text-neutral-500">
             {source === "placeholder"
-              ? "Placeholder-data — algoritme og AI tilføjes i et senere trin."
+              ? "Genereret ud fra opskrifter og produktpriser."
               : "Genereret ud fra dine valg og supermarkedets produkter."}
           </p>
         </div>
 
         <Link
           to={ROUTES.shoppingList}
-          className={cn(
-            "inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-neutral-300",
-            "bg-white px-3 text-sm font-medium text-neutral-800 transition-colors",
-            "hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
-          )}
+          className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 text-sm font-medium text-neutral-800 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-neutral-300 hover:bg-neutral-50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 sm:w-auto"
         >
+          <ShoppingBag className="h-4 w-4" strokeWidth={2} aria-hidden />
           Se indkøbsliste ({shoppingListItems.length})
         </Link>
       </div>
@@ -49,92 +87,87 @@ export function GeneratedMealPlan({ plan }: GeneratedMealPlanProps) {
       <div className="flex flex-wrap gap-2">
         <Badge variant="brand">{criteria.days} dage</Badge>
         <Badge variant="neutral">{criteria.people} personer</Badge>
-        <Badge variant="neutral">{criteria.store}</Badge>
-        <Badge variant={summary.underBudget ? "success" : "warning"}>
-          {summary.underBudget ? "Inden for budget" : "Over budget"}
-        </Badge>
-        {selectedPreferenceLabels &&
-          criteria.dietaryPreferences.map((pref) => (
-            <Badge key={pref} variant="neutral">
-              {pref}
-            </Badge>
-          ))}
+        <Badge variant="budget">{criteria.store}</Badge>
+        {activeDietFilterLabels.map((label) => (
+          <Badge key={label} variant={getDietFilterBadgeVariant(label)}>
+            {label}
+          </Badge>
+        ))}
         {criteria.allergies.trim() && (
-          <Badge variant="warning">Undgår: {criteria.allergies}</Badge>
+          <Badge variant="warning">Note: {criteria.allergies}</Badge>
         )}
       </div>
 
-      <div className="grid gap-stack-lg sm:grid-cols-2 lg:grid-cols-4">
+      <BudgetSummaryCard
+        plan={plan}
+        onMakeCheaper={onMakeCheaper}
+        isOptimizing={isOptimizing}
+        optimizeMessage={optimizeMessage}
+        optimizationSavings={optimizationSavings}
+      />
+
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Estimeret omkostning"
-          value={formatCurrency(summary.scaledCost)}
-          hint={`For ${criteria.people} person${criteria.people !== 1 ? "er" : ""}`}
-        />
-        <StatCard
-          label="Budget"
-          value={formatCurrency(criteria.budget)}
-          hint={`${summary.budgetUsedPercent}% brugt`}
-        />
-        <StatCard
-          label="Måltider"
+          label="Måltider i alt"
           value={String(summary.mealCount)}
           hint={`${criteria.days} dage planlagt`}
+          icon={<UtensilsCrossed className="h-5 w-5" strokeWidth={2} />}
         />
         <StatCard
           label="Gns. pr. dag"
           value={formatCurrency(summary.averageCostPerDay)}
-          hint="Inkl. alle måltider"
+          hint="Baseret på indkøbsliste"
+          icon={<CalendarDays className="h-5 w-5" strokeWidth={2} />}
+        />
+        <StatCard
+          label="Pr. person"
+          value={formatCurrency(summary.totalCost)}
+          hint="Estimeret total pr. person"
+          icon={<User className="h-5 w-5" strokeWidth={2} />}
+          className="sm:col-span-2 lg:col-span-1"
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Budgetforbrug</CardTitle>
-          <CardDescription>
-            Estimeret total for {criteria.people} person
-            {criteria.people !== 1 ? "er" : ""} over {criteria.days} dage hos{" "}
-            {criteria.store}
-          </CardDescription>
-        </CardHeader>
-        <ProgressBar
-          value={summary.scaledCost}
-          max={criteria.budget}
-          variant={summary.underBudget ? "brand" : "accent"}
-        />
-        <p className="mt-2 text-caption">
-          {summary.underBudget
-            ? `${formatCurrency(criteria.budget - summary.scaledCost)} tilbage i budget`
-            : `${formatCurrency(summary.scaledCost - criteria.budget)} over budget`}
-        </p>
-      </Card>
+      {isOptimizing && (
+        <div
+          className="flex items-center gap-2 rounded-2xl border border-brand-100 bg-brand-50/50 px-4 py-3 text-body-sm text-brand-800"
+          role="status"
+        >
+          <LoadingSpinner />
+          Optimerer madplanen — finder billigere alternativer...
+        </div>
+      )}
 
-      <div className="flex flex-col gap-stack-xl">
-        {days.map(({ day, label, meals }) => (
-          <div key={day}>
-            <div className="mb-stack-md flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-neutral-900">{label}</h3>
-              <span className="text-caption font-medium text-neutral-500">
-                {meals.length} måltider ·{" "}
-                {formatCurrency(
-                  meals.reduce((sum, meal) => sum + meal.cost, 0) * criteria.people,
-                )}
-              </span>
-            </div>
+      <div>
+        <div className="mb-6 space-y-1">
+          <h3 className="text-section-title">Ugeoversigt</h3>
+          <Text variant="body-sm" className="text-neutral-500">
+            Morgenmad, frokost og aftensmad for hver dag
+          </Text>
+        </div>
 
-            {meals.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-8 text-center text-caption">
-                Ingen måltider for denne dag
-              </div>
-            ) : (
-              <div className="grid gap-stack-md sm:grid-cols-2 lg:grid-cols-3">
-                {meals.map((meal) => (
-                  <MealCard key={meal.id} meal={meal} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {days.map((dayPlan, dayIndex) => (
+            <DayPlanCard
+              key={dayPlan.day}
+              dayPlan={dayPlan}
+              dayIndex={dayIndex}
+              people={criteria.people}
+              onSwapMeal={onSwapMeal ? openSwapModal : undefined}
+            />
+          ))}
+        </div>
       </div>
+
+      {onSwapMeal && (
+        <RecipeSwapModal
+          open={swapTarget != null}
+          target={swapTarget}
+          plan={plan}
+          onClose={() => setSwapTarget(null)}
+          onSelect={handleSwapSelect}
+        />
+      )}
     </section>
   );
 }

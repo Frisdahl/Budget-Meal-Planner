@@ -78,7 +78,11 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   /* ── Max width ── */
-  --container-app: 72rem;
+  --container-app: 80rem;
+
+  /* ── Meal plan elevation ── */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px rgb(15 23 42 / 0.04);
+  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.05), 0 8px 20px rgb(15 23 42 / 0.07);
 }
 
 /* ── Base styles ── */
@@ -99,10 +103,10 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: 0.9375rem;
+    line-height: 1.6;
     color: var(--color-neutral-800);
-    background-color: var(--color-neutral-50);
+    background-color: #f8fafc;
   }
 
   h1,
@@ -168,8 +172,59 @@
   }
 
   .text-caption {
-    font-size: 0.75rem;
-    line-height: 1rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
     color: var(--color-neutral-500);
+  }
+
+  .text-page-title {
+    font-size: 2.125rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--color-neutral-900);
+  }
+
+  .text-section-title {
+    font-size: 1.375rem;
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--color-neutral-900);
+  }
+
+  .text-card-title {
+    font-size: 1.125rem;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+
+  .animate-fade-in {
+    animation: fade-in-up 0.45s ease-out both;
+  }
+
+  .card-interactive {
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

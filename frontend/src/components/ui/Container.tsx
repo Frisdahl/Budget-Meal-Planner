@@ -8,7 +8,7 @@ type ContainerProps = HTMLAttributes<HTMLDivElement> & {
 const sizeClasses = {
   default: "max-w-[var(--container-app)]",
   narrow: "max-w-2xl",
-  wide: "max-w-7xl",
+  wide: "max-w-[var(--container-app)]",
 } as const;
 
 export function Container({

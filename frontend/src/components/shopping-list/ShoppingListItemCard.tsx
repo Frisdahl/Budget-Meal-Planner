@@ -7,7 +7,9 @@ import {
 } from "@/components/ui";
 import { ProductImagePlaceholder } from "@/components/products/ProductImagePlaceholder";
 import { getLineSavings, getLineTotal } from "@/lib/shoppingList";
+import { formatRequiredAmount } from "@/lib/productPackSize";
 import { formatCurrency } from "@/lib/format";
+import type { IngredientUnit } from "@/data/recipes";
 import type { ShoppingItem } from "@/types";
 
 type ShoppingListItemCardProps = {
@@ -25,6 +27,10 @@ export function ShoppingListItemCard({
 }: ShoppingListItemCardProps) {
   const lineTotal = getLineTotal(item);
   const lineSavings = getLineSavings(item);
+  const hasPackDetails =
+    item.requiredAmount != null &&
+    item.requiredUnit != null &&
+    item.packsNeeded != null;
 
   return (
     <article
@@ -88,6 +94,16 @@ export function ShoppingListItemCard({
               Til: {item.mealRef}
             </Text>
           )}
+          {hasPackDetails && (
+            <Text variant="caption" as="span" className="mt-0.5 block text-neutral-600">
+              {formatRequiredAmount(
+                item.requiredAmount!,
+                item.requiredUnit as IngredientUnit,
+              )}{" "}
+              behov — {item.packsNeeded} pakke
+              {item.packsNeeded !== 1 ? "r" : ""}
+            </Text>
+          )}
           {lineSavings > 0 && (
             <Text variant="caption" as="span" className="mt-1 block text-brand-600">
               Spar {formatCurrency(lineSavings)}
@@ -120,7 +136,9 @@ export function ShoppingListItemCard({
               {formatCurrency(lineTotal)}
             </span>
             <Text variant="caption" as="span" className="block">
-              {formatCurrency(item.unitPrice)}/{item.unit}
+              {hasPackDetails
+                ? `${item.packsNeeded} × ${formatCurrency(item.unitPrice)}/pakke`
+                : `${item.quantity} × ${formatCurrency(item.unitPrice)}/${item.unit}`}
             </Text>
           </div>
 
