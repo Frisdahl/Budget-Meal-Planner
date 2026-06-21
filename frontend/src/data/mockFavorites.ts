@@ -1,0 +1,83 @@
+import type { FavoriteMeal } from "@/types";
+
+export const FAVORITE_TAGS = [
+  "Alle",
+  "vegetar",
+  "protein",
+  "budget",
+  "hurtig",
+  "familie",
+  "sund",
+  "weekend",
+] as const;
+
+export type FavoriteTag = (typeof FAVORITE_TAGS)[number];
+
+export const mockFavorites: FavoriteMeal[] = [
+  {
+    id: "f1",
+    name: "Pasta med kødsovs",
+    description: "Klassisk spaghetti bolognese — altid en vinder til hverdagen",
+    cost: 35.0,
+    prepTimeMinutes: 35,
+    servings: 4,
+    tags: ["familie", "budget"],
+    lastUsed: "2026-06-16",
+    timesUsed: 12,
+  },
+  {
+    id: "f2",
+    name: "Laks med ovnbagte grøntsager",
+    description: "Sund og mættende aftensmad klar på under 30 minutter",
+    cost: 48.0,
+    prepTimeMinutes: 30,
+    servings: 2,
+    tags: ["protein", "sund"],
+    lastUsed: "2026-06-10",
+    timesUsed: 8,
+  },
+  {
+    id: "f3",
+    name: "Taco fredag",
+    description: "Selve-taco med alle toppings — perfekt til fredag aften",
+    cost: 42.0,
+    prepTimeMinutes: 30,
+    servings: 4,
+    tags: ["familie", "budget"],
+    lastUsed: "2026-06-13",
+    timesUsed: 15,
+  },
+  {
+    id: "f4",
+    name: "Wraps med falafel",
+    description: "Vegetarisk frokost med sprøde falafler og cremet hummus",
+    cost: 26.0,
+    prepTimeMinutes: 15,
+    servings: 2,
+    tags: ["vegetar", "hurtig"],
+    lastUsed: "2026-06-11",
+    timesUsed: 6,
+  },
+  {
+    id: "f5",
+    name: "Kylling wok",
+    description: "Hurtig wok med masser af grøntsager og asiatisk smag",
+    cost: 32.0,
+    prepTimeMinutes: 25,
+    servings: 3,
+    tags: ["protein", "hurtig"],
+    lastUsed: "2026-06-09",
+    timesUsed: 9,
+  },
+  {
+    id: "f6",
+    name: "Tomatsuppe med brød",
+    description: "Varm og billig suppe — ideel til kolde dage",
+    cost: 22.0,
+    prepTimeMinutes: 25,
+    servings: 4,
+    tags: ["vegetar", "budget"],
+    lastUsed: "2026-06-05",
+    timesUsed: 5,
+  },
+];
