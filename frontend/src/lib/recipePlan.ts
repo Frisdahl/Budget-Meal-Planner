@@ -13,7 +13,16 @@ import {
   getDietFiltersFromCriteria,
   getRecipesByMealTypeFromPool,
 } from "@/lib/recipeFilter";
+import {
+  estimatePlanTotalFromCachedRecipeCosts,
+  getActiveGenerationCache,
+  runWithGenerationCache,
+  yieldToMain,
+} from "@/lib/generationCache";
 import { findBestProductForIngredient, getEffectivePrice } from "@/lib/products";
+import { logMealPlanDebug, MEAL_PLAN_DEBUG } from "@/lib/mealPlanDebug";
+import { getMealRecipeId } from "@/lib/mealRecipe";
+import { inferRecipeSource } from "@/lib/recipeSource";
 import {
   calculatePacksNeeded,
 } from "@/lib/productPackSize";
@@ -26,12 +35,16 @@ export const PLACEHOLDER_UNIT_PRICE = 12.5;
 export const OVER_BUDGET_MESSAGE =
   "Madplanen er over budget. Prøv færre dage, færre personer eller billigere opskrifter.";
 
+export const IMPOSSIBLE_BUDGET_MESSAGE =
+  "Budgettet er for lavt til de valgte opskrifter og produkter. Prøv færre dage, færre personer eller flere lokale budgetopskrifter.";
+
 const FULL_DAY_MEAL_TYPES: RecipeMealType[] = ["breakfast", "lunch", "dinner"];
 
 const IDEAL_BUDGET_MIN_RATIO = 0.85;
 const INITIAL_BUDGET_LOW_RATIO = 1.05;
 const INITIAL_BUDGET_HIGH_RATIO = 1.2;
-const MAX_BUDGET_ADJUST_ITERATIONS = 20;
+const MAX_BUDGET_ADJUST_ITERATIONS = 8;
+const MAX_SWAP_ALTERNATIVES = 5;
 
 export const OPTIMIZE_FAILED_MESSAGE =
   "Kunne ikke gøre planen billigere uden at fjerne måltider.";
@@ -66,13 +79,8 @@ function distanceFromBudget(total: number, budget: number): number {
   return Math.abs(budget - total);
 }
 
-function isDevLogEnabled(): boolean {
-  return import.meta.env.DEV;
-}
-
 function logGenerationEvent(payload: Record<string, unknown>): void {
-  if (!isDevLogEnabled()) return;
-  console.log("[MealPlan generation]", payload);
+  logMealPlanDebug("[MealPlan generation]", payload);
 }
 
 
@@ -126,7 +134,10 @@ function estimateIngredientLineCost(
   ingredientName: string,
   products: Product[],
 ): number {
-  const matchedProduct = findBestProductForIngredient(ingredientName, products);
+  const cache = getActiveGenerationCache();
+  const matchedProduct = cache
+    ? cache.findProductForIngredient(ingredientName)
+    : findBestProductForIngredient(ingredientName, products);
 
   if (matchedProduct) {
     const packCalc = calculatePacksNeeded(
@@ -167,6 +178,10 @@ export function estimateRecipeTotalCost(
   products: Product[],
   people: number,
 ): number {
+  const cache = getActiveGenerationCache();
+  if (cache && cache.people === people) {
+    return cache.estimateRecipeCost(recipe);
+  }
   return estimateRecipeIngredientCost(recipe, people, products);
 }
 
@@ -257,7 +272,7 @@ export function findMoreExpensiveRecipeSwap(
   return bestSwap;
 }
 
-function listCheaperRecipeSwaps(
+function listBudgetReductionAlternatives(
   currentRecipe: Recipe,
   products: Product[],
   people: number,
@@ -265,18 +280,46 @@ function listCheaperRecipeSwaps(
 ): Recipe[] {
   const currentCost = estimateRecipeTotalCost(currentRecipe, products, people);
 
-  return getRecipesByMealTypeFromPool(currentRecipe.mealType, recipePool)
-    .filter((candidate) => {
-      if (candidate.id === currentRecipe.id) return false;
-      return (
-        estimateRecipeTotalCost(candidate, products, people) < currentCost
-      );
-    })
+  const cheaperThanCurrent = getRecipesByMealTypeFromPool(
+    currentRecipe.mealType,
+    recipePool,
+  )
+    .filter((candidate) => candidate.id !== currentRecipe.id)
+    .filter(
+      (candidate) =>
+        estimateRecipeTotalCost(candidate, products, people) < currentCost,
+    )
     .sort(
       (a, b) =>
-        estimateRecipeTotalCost(b, products, people) -
-        estimateRecipeTotalCost(a, products, people),
+        estimateRecipeTotalCost(a, products, people) -
+        estimateRecipeTotalCost(b, products, people),
     );
+
+  if (cheaperThanCurrent.length > 0) {
+    return cheaperThanCurrent;
+  }
+
+  return getRecipesByMealTypeFromPool(currentRecipe.mealType, recipePool)
+    .filter((candidate) => candidate.id !== currentRecipe.id)
+    .sort(
+      (a, b) =>
+        estimateRecipeTotalCost(a, products, people) -
+        estimateRecipeTotalCost(b, products, people),
+    );
+}
+
+function sortSlotIndicesByDescendingCost(
+  recipes: Recipe[],
+  products: Product[],
+  people: number,
+): number[] {
+  return recipes
+    .map((recipe, index) => ({
+      index,
+      cost: estimateRecipeTotalCost(recipe, products, people),
+    }))
+    .sort((a, b) => b.cost - a.cost)
+    .map((entry) => entry.index);
 }
 
 function listMoreExpensiveRecipeSwaps(
@@ -301,13 +344,13 @@ function listMoreExpensiveRecipeSwaps(
     );
 }
 
-export function generateHighValueInitialPlan(
+export async function generateHighValueInitialPlan(
   criteria: MealPlanCriteria,
   products: Product[],
   recipePool: Recipe[],
-): Recipe[] {
+): Promise<Recipe[]> {
   const { targetMid } = getInitialBudgetTargetRange(criteria.budget);
-  const usedIds = new Set<string>();
+  const usageCount = new Map<string, number>();
   const selected: Recipe[] = [];
   const totalSlots = criteria.days * FULL_DAY_MEAL_TYPES.length;
 
@@ -317,25 +360,27 @@ export function generateHighValueInitialPlan(
         .map((recipe) => ({
           recipe,
           cost: estimateRecipeTotalCost(recipe, products, criteria.people),
+          uses: usageCount.get(recipe.id) ?? 0,
         }))
-        .sort((a, b) => b.cost - a.cost);
+        .sort((a, b) => {
+          if (a.uses !== b.uses) return a.uses - b.uses;
+          return b.cost - a.cost;
+        });
 
       if (candidates.length === 0) {
         throw new Error(`No recipes for meal type: ${mealType}`);
       }
 
+      const unusedCandidates = candidates.filter((entry) => entry.uses === 0);
+      const mustRepeat = unusedCandidates.length === 0;
+      let pool = mustRepeat ? candidates : unusedCandidates;
+
       const excludeCheapestCount = Math.max(
         0,
-        Math.floor(candidates.length * 0.25),
+        Math.floor(pool.length * 0.25),
       );
-      let pool =
-        excludeCheapestCount > 0
-          ? candidates.slice(0, candidates.length - excludeCheapestCount)
-          : candidates;
-
-      const unusedPool = pool.filter((entry) => !usedIds.has(entry.recipe.id));
-      if (unusedPool.length > 0) {
-        pool = unusedPool;
+      if (excludeCheapestCount > 0 && pool.length > excludeCheapestCount + 1) {
+        pool = pool.slice(0, pool.length - excludeCheapestCount);
       }
 
       const remainingSlots = totalSlots - selected.length;
@@ -352,9 +397,13 @@ export function generateHighValueInitialPlan(
 
           const entryDistance = Math.abs(entry.cost - slotTarget);
           const bestDistance = Math.abs(best.cost - slotTarget);
+          const entryRepeatPenalty = entry.uses > 0 ? 10000 : 0;
+          const bestRepeatPenalty = best.uses > 0 ? 10000 : 0;
+          const entryScore = entryDistance + entryRepeatPenalty;
+          const bestScore = bestDistance + bestRepeatPenalty;
 
-          if (entryDistance !== bestDistance) {
-            return entryDistance < bestDistance ? entry : best;
+          if (entryScore !== bestScore) {
+            return entryScore < bestScore ? entry : best;
           }
 
           return entry.cost > best.cost ? entry : best;
@@ -364,8 +413,10 @@ export function generateHighValueInitialPlan(
 
       const recipe = picked?.recipe ?? candidates[0]!.recipe;
       selected.push(recipe);
-      usedIds.add(recipe.id);
+      usageCount.set(recipe.id, (usageCount.get(recipe.id) ?? 0) + 1);
     }
+
+    await yieldToMain();
   }
 
   return selected;
@@ -378,12 +429,12 @@ type BudgetAdjustResult = {
   noValidSwaps: boolean;
 };
 
-export function adjustPlanDownToBudget(
+export async function adjustPlanDownToBudget(
   recipes: Recipe[],
   criteria: MealPlanCriteria,
   products: Product[],
   recipePool: Recipe[],
-): BudgetAdjustResult {
+): Promise<BudgetAdjustResult> {
   let currentRecipes = [...recipes];
   let plan = buildPlanFromRecipes(currentRecipes, criteria, products);
   let total = getShoppingListTotal(plan.shoppingListItems);
@@ -393,44 +444,55 @@ export function adjustPlanDownToBudget(
   for (let iteration = 0; iteration < MAX_BUDGET_ADJUST_ITERATIONS; iteration++) {
     if (total <= budget) break;
 
+    await yieldToMain();
+
     let bestSwap:
       | {
           slotIndex: number;
           swap: Recipe;
           trialRecipes: Recipe[];
-          trialPlan: GeneratedMealPlanResult;
-          trialTotal: number;
+          estimatedTotal: number;
         }
       | undefined;
 
-    for (let slotIndex = 0; slotIndex < currentRecipes.length; slotIndex++) {
+    const estimatedCurrentTotal = estimatePlanTotalFromCachedRecipeCosts(
+      currentRecipes,
+      criteria.people,
+    );
+
+    const slotOrder = sortSlotIndicesByDescendingCost(
+      currentRecipes,
+      products,
+      criteria.people,
+    );
+
+    for (const slotIndex of slotOrder) {
       const currentRecipe = currentRecipes[slotIndex]!;
 
-      for (const cheaperSwap of listCheaperRecipeSwaps(
+      for (const cheaperSwap of listBudgetReductionAlternatives(
         currentRecipe,
         products,
         criteria.people,
         recipePool,
-      )) {
+      ).slice(0, MAX_SWAP_ALTERNATIVES)) {
         const trialRecipes = [...currentRecipes];
         trialRecipes[slotIndex] = cheaperSwap;
-        const trialPlan = buildPlanFromRecipes(trialRecipes, criteria, products);
+        const estimatedTrialTotal = estimatePlanTotalFromCachedRecipeCosts(
+          trialRecipes,
+          criteria.people,
+        );
 
-        if (trialPlan.shoppingListItems.length === 0) continue;
-        if (!validatePlanStructure(plan, trialPlan)) continue;
-
-        const trialTotal = getShoppingListTotal(trialPlan.shoppingListItems);
-        if (trialTotal >= total) continue;
+        if (estimatedTrialTotal >= estimatedCurrentTotal) continue;
 
         const swapScore =
-          trialTotal > budget
-            ? 1000 - (total - trialTotal)
-            : 2000 - distanceFromBudget(trialTotal, budget);
+          estimatedTrialTotal > budget
+            ? 1000 - (estimatedCurrentTotal - estimatedTrialTotal)
+            : 2000 - distanceFromBudget(estimatedTrialTotal, budget);
 
         const currentBestScore = bestSwap
-          ? bestSwap.trialTotal > budget
-            ? 1000 - (total - bestSwap.trialTotal)
-            : 2000 - distanceFromBudget(bestSwap.trialTotal, budget)
+          ? bestSwap.estimatedTotal > budget
+            ? 1000 - (estimatedCurrentTotal - bestSwap.estimatedTotal)
+            : 2000 - distanceFromBudget(bestSwap.estimatedTotal, budget)
           : -Infinity;
 
         if (swapScore > currentBestScore) {
@@ -438,8 +500,7 @@ export function adjustPlanDownToBudget(
             slotIndex,
             swap: cheaperSwap,
             trialRecipes,
-            trialPlan,
-            trialTotal,
+            estimatedTotal: estimatedTrialTotal,
           };
         }
       }
@@ -457,6 +518,23 @@ export function adjustPlanDownToBudget(
       break;
     }
 
+    const trialPlan = buildPlanFromRecipes(
+      bestSwap.trialRecipes,
+      criteria,
+      products,
+    );
+    const trialTotal = getShoppingListTotal(trialPlan.shoppingListItems);
+
+    if (trialPlan.shoppingListItems.length === 0 || !validatePlanStructure(plan, trialPlan)) {
+      noValidSwaps = true;
+      break;
+    }
+
+    if (trialTotal >= total) {
+      noValidSwaps = true;
+      break;
+    }
+
     logGenerationEvent({
       phase: "down-swap",
       iteration: iteration + 1,
@@ -464,23 +542,23 @@ export function adjustPlanDownToBudget(
       from: currentRecipes[bestSwap.slotIndex]!.title,
       to: bestSwap.swap.title,
       oldTotal: total,
-      newTotal: bestSwap.trialTotal,
+      newTotal: trialTotal,
     });
 
     currentRecipes = bestSwap.trialRecipes;
-    plan = bestSwap.trialPlan;
-    total = bestSwap.trialTotal;
+    plan = trialPlan;
+    total = trialTotal;
   }
 
   return { recipes: currentRecipes, plan, total, noValidSwaps };
 }
 
-export function upgradePlanTowardBudget(
+export async function upgradePlanTowardBudget(
   recipes: Recipe[],
   criteria: MealPlanCriteria,
   products: Product[],
   recipePool: Recipe[],
-): BudgetAdjustResult {
+): Promise<BudgetAdjustResult> {
   let currentRecipes = [...recipes];
   let plan = buildPlanFromRecipes(currentRecipes, criteria, products);
   let total = getShoppingListTotal(plan.shoppingListItems);
@@ -491,15 +569,21 @@ export function upgradePlanTowardBudget(
   for (let iteration = 0; iteration < MAX_BUDGET_ADJUST_ITERATIONS; iteration++) {
     if (isInTargetBudgetRange(total, budget)) break;
 
+    await yieldToMain();
+
     let bestSwap:
       | {
           slotIndex: number;
           swap: Recipe;
           trialRecipes: Recipe[];
-          trialPlan: GeneratedMealPlanResult;
-          trialTotal: number;
+          estimatedTotal: number;
         }
       | undefined;
+
+    const estimatedCurrentTotal = estimatePlanTotalFromCachedRecipeCosts(
+      currentRecipes,
+      criteria.people,
+    );
 
     for (let slotIndex = 0; slotIndex < currentRecipes.length; slotIndex++) {
       const currentRecipe = currentRecipes[slotIndex]!;
@@ -509,27 +593,26 @@ export function upgradePlanTowardBudget(
         products,
         criteria.people,
         recipePool,
-      )) {
+      ).slice(0, MAX_SWAP_ALTERNATIVES)) {
         const trialRecipes = [...currentRecipes];
         trialRecipes[slotIndex] = expensiveSwap;
-        const trialPlan = buildPlanFromRecipes(trialRecipes, criteria, products);
+        const estimatedTrialTotal = estimatePlanTotalFromCachedRecipeCosts(
+          trialRecipes,
+          criteria.people,
+        );
 
-        if (trialPlan.shoppingListItems.length === 0) continue;
-        if (!validatePlanStructure(plan, trialPlan)) continue;
-
-        const trialTotal = getShoppingListTotal(trialPlan.shoppingListItems);
-        if (trialTotal > budget) continue;
-        if (trialTotal <= total) continue;
+        if (estimatedTrialTotal > budget) continue;
+        if (estimatedTrialTotal <= estimatedCurrentTotal) continue;
         if (
-          distanceFromBudget(trialTotal, budget) >=
-          distanceFromBudget(total, budget)
+          distanceFromBudget(estimatedTrialTotal, budget) >=
+          distanceFromBudget(estimatedCurrentTotal, budget)
         ) {
           continue;
         }
 
-        const swapScore = 2000 - distanceFromBudget(trialTotal, budget);
+        const swapScore = 2000 - distanceFromBudget(estimatedTrialTotal, budget);
         const currentBestScore = bestSwap
-          ? 2000 - distanceFromBudget(bestSwap.trialTotal, budget)
+          ? 2000 - distanceFromBudget(bestSwap.estimatedTotal, budget)
           : -Infinity;
 
         if (swapScore > currentBestScore) {
@@ -537,8 +620,7 @@ export function upgradePlanTowardBudget(
             slotIndex,
             swap: expensiveSwap,
             trialRecipes,
-            trialPlan,
-            trialTotal,
+            estimatedTotal: estimatedTrialTotal,
           };
         }
       }
@@ -556,6 +638,23 @@ export function upgradePlanTowardBudget(
       break;
     }
 
+    const trialPlan = buildPlanFromRecipes(
+      bestSwap.trialRecipes,
+      criteria,
+      products,
+    );
+    const trialTotal = getShoppingListTotal(trialPlan.shoppingListItems);
+
+    if (trialPlan.shoppingListItems.length === 0 || !validatePlanStructure(plan, trialPlan)) {
+      noValidSwaps = true;
+      break;
+    }
+
+    if (trialTotal > budget || trialTotal <= total) {
+      noValidSwaps = true;
+      break;
+    }
+
     logGenerationEvent({
       phase: "upgrade-swap",
       iteration: iteration + 1,
@@ -563,12 +662,12 @@ export function upgradePlanTowardBudget(
       from: currentRecipes[bestSwap.slotIndex]!.title,
       to: bestSwap.swap.title,
       oldTotal: total,
-      newTotal: bestSwap.trialTotal,
+      newTotal: trialTotal,
     });
 
     currentRecipes = bestSwap.trialRecipes;
-    plan = bestSwap.trialPlan;
-    total = bestSwap.trialTotal;
+    plan = trialPlan;
+    total = trialTotal;
 
     if (total >= idealMin) break;
   }
@@ -633,7 +732,7 @@ function logNarrowRecipePriceRange(
   total: number,
   recipePool: Recipe[],
 ): void {
-  if (!isDevLogEnabled()) return;
+  if (!MEAL_PLAN_DEBUG) return;
 
   const { idealMin, idealMax } = getIdealBudgetRange(criteria.budget);
   const { minTotal, maxTotal } = estimateRecipePriceRange(
@@ -654,92 +753,123 @@ function logNarrowRecipePriceRange(
   }
 }
 
-export function generateBudgetAwarePlan(
+export async function generateBudgetAwarePlan(
   criteria: MealPlanCriteria,
   products: Product[],
-): GeneratedMealPlanResult {
-  const recipePool = filterRecipesForCriteria(getAllRecipes(), criteria);
-  assertEnoughRecipesForPlan(recipePool);
-
-  const { idealMin, idealMax } = getIdealBudgetRange(criteria.budget);
-  const initialTargetRange = getInitialBudgetTargetRange(criteria.budget);
-
-  if (isDevLogEnabled()) {
-    logGenerationEvent({
-      phase: "filter",
-      dietFilters: getDietFiltersFromCriteria(criteria),
-      availableRecipes: recipePool.length,
-      breakfast: getRecipesByMealTypeFromPool("breakfast", recipePool).length,
-      lunch: getRecipesByMealTypeFromPool("lunch", recipePool).length,
-      dinner: getRecipesByMealTypeFromPool("dinner", recipePool).length,
-    });
-  }
-
-  let recipes = generateHighValueInitialPlan(criteria, products, recipePool);
-  let plan = buildPlanFromRecipes(recipes, criteria, products);
-  let total = getShoppingListTotal(plan.shoppingListItems);
-
-  logGenerationEvent({
-    phase: "initial",
-    budget: criteria.budget,
-    initialTargetRange,
-    targetRange: { idealMin, idealMax },
-    recipeTitles: recipes.map((recipe) => recipe.title),
-    initialTotal: total,
-  });
-
-  if (total > criteria.budget) {
-    const downResult = adjustPlanDownToBudget(
-      recipes,
+  recipePoolInput?: Recipe[],
+): Promise<GeneratedMealPlanResult> {
+  return runWithGenerationCache(criteria, products, async () => {
+    const recipePool = filterRecipesForCriteria(
+      recipePoolInput ?? getAllRecipes(),
       criteria,
-      products,
-      recipePool,
     );
-    recipes = downResult.recipes;
-    plan = downResult.plan;
-    total = downResult.total;
-  }
+    assertEnoughRecipesForPlan(recipePool);
 
-  if (total <= criteria.budget && total >= idealMin) {
+    const { idealMin, idealMax } = getIdealBudgetRange(criteria.budget);
+    const initialTargetRange = getInitialBudgetTargetRange(criteria.budget);
+
+    if (MEAL_PLAN_DEBUG) {
+      logGenerationEvent({
+        phase: "filter",
+        dietFilters: getDietFiltersFromCriteria(criteria),
+        availableRecipes: recipePool.length,
+        breakfast: getRecipesByMealTypeFromPool("breakfast", recipePool).length,
+        lunch: getRecipesByMealTypeFromPool("lunch", recipePool).length,
+        dinner: getRecipesByMealTypeFromPool("dinner", recipePool).length,
+      });
+    }
+
+    await yieldToMain();
+
+    let recipes = await generateHighValueInitialPlan(criteria, products, recipePool);
+    let plan = buildPlanFromRecipes(recipes, criteria, products);
+    let total = getShoppingListTotal(plan.shoppingListItems);
+    let budgetReductionExhausted = false;
+
+    logGenerationEvent({
+      phase: "initial",
+      budget: criteria.budget,
+      initialTargetRange,
+      targetRange: { idealMin, idealMax },
+      recipeTitles: recipes.map((recipe) => recipe.title),
+      initialTotal: total,
+    });
+
+    if (total > criteria.budget) {
+      const downResult = await adjustPlanDownToBudget(
+        recipes,
+        criteria,
+        products,
+        recipePool,
+      );
+      recipes = downResult.recipes;
+      plan = downResult.plan;
+      total = downResult.total;
+      budgetReductionExhausted = downResult.noValidSwaps;
+    }
+
+    if (total <= criteria.budget && total >= idealMin) {
+      logGenerationEvent({
+        phase: "final",
+        budget: criteria.budget,
+        targetRange: { idealMin, idealMax },
+        finalTotal: total,
+        inTargetRange: true,
+        noValidSwapsNeeded: true,
+      });
+      logNarrowRecipePriceRange(criteria, products, total, recipePool);
+      return attachBudgetNotice(plan, total, criteria.budget, budgetReductionExhausted);
+    }
+
+    if (total < idealMin) {
+      const upgradeResult = await upgradePlanTowardBudget(
+        recipes,
+        criteria,
+        products,
+        recipePool,
+      );
+      recipes = upgradeResult.recipes;
+      plan = upgradeResult.plan;
+      total = upgradeResult.total;
+    }
+
     logGenerationEvent({
       phase: "final",
       budget: criteria.budget,
       targetRange: { idealMin, idealMax },
       finalTotal: total,
-      inTargetRange: true,
-      noValidSwapsNeeded: true,
+      inTargetRange: isInTargetBudgetRange(total, criteria.budget),
+      underBudget: total <= criteria.budget,
+      distanceFromBudget: distanceFromBudget(total, criteria.budget),
     });
     logNarrowRecipePriceRange(criteria, products, total, recipePool);
+
+    return attachBudgetNotice(plan, total, criteria.budget, budgetReductionExhausted);
+  });
+}
+
+function attachBudgetNotice(
+  plan: GeneratedMealPlanResult,
+  total: number,
+  budget: number,
+  budgetReductionExhausted: boolean,
+): GeneratedMealPlanResult {
+  if (total <= budget) {
     return plan;
   }
 
-  if (total < idealMin) {
-    const upgradeResult = upgradePlanTowardBudget(
-      recipes,
-      criteria,
-      products,
-      recipePool,
-    );
-    recipes = upgradeResult.recipes;
-    plan = upgradeResult.plan;
-    total = upgradeResult.total;
-  }
-
-  logGenerationEvent({
-    phase: "final",
-    budget: criteria.budget,
-    targetRange: { idealMin, idealMax },
-    finalTotal: total,
-    inTargetRange: isInTargetBudgetRange(total, criteria.budget),
-    underBudget: total <= criteria.budget,
-    distanceFromBudget: distanceFromBudget(total, criteria.budget),
-  });
-  logNarrowRecipePriceRange(criteria, products, total, recipePool);
-
-  return plan;
+  return {
+    ...plan,
+    summary: {
+      ...plan.summary,
+      budgetNotice: budgetReductionExhausted
+        ? IMPOSSIBLE_BUDGET_MESSAGE
+        : OVER_BUDGET_MESSAGE,
+    },
+  };
 }
 
-function recipeMealTypeToMealType(mealType: RecipeMealType): MealType {
+export function recipeMealTypeToMealType(mealType: RecipeMealType): MealType {
   if (mealType === "breakfast") return "breakfast";
   if (mealType === "lunch" || mealType === "snack") return "lunch";
   return "dinner";
@@ -754,6 +884,7 @@ export function recipeToMeal(
 
   return {
     id: recipe.id,
+    recipeId: recipe.id,
     name: recipe.title,
     description: recipe.instructions[0] ?? "",
     type: recipeMealTypeToMealType(recipe.mealType),
@@ -763,6 +894,8 @@ export function recipeToMeal(
     calories: 450,
     tags: recipe.tags,
     ingredients: recipe.ingredients.map((ingredient) => ingredient.name),
+    image: recipe.image,
+    source: inferRecipeSource(recipe),
   };
 }
 
@@ -833,7 +966,10 @@ function buildShoppingItemFromIngredient(
   products: Product[],
 ): ShoppingItem {
   const mealRef = Array.from(aggregated.mealRefs).join(", ");
-  const matchedProduct = findBestProductForIngredient(aggregated.name, products);
+  const cache = getActiveGenerationCache();
+  const matchedProduct = cache
+    ? cache.findProductForIngredient(aggregated.name)
+    : findBestProductForIngredient(aggregated.name, products);
   const id = `plan-ingredient-${index}-${aggregated.name.toLowerCase().replace(/\s+/g, "-")}-${aggregated.requiredUnit}`;
 
   const baseFields = {
@@ -901,7 +1037,7 @@ export function getSelectedRecipesFromPlan(
 ): Recipe[] {
   return plan.days.flatMap((day) =>
     day.meals
-      .map((meal) => getRecipeById(meal.id))
+      .map((meal) => getRecipeById(getMealRecipeId(meal)))
       .filter((recipe): recipe is Recipe => recipe != null),
   );
 }
@@ -948,7 +1084,7 @@ export function validatePlanStructure(
 
     for (const meal of afterDay.meals) {
       if (!meal.id || !meal.name.trim()) return false;
-      if (!getRecipeById(meal.id)) return false;
+      if (!getRecipeById(getMealRecipeId(meal))) return false;
     }
   }
 

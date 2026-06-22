@@ -1,7 +1,10 @@
 export type MealType = "breakfast" | "lunch" | "dinner";
 
+export type MealSource = "spoonacular" | "local";
+
 export type Meal = {
   id: string;
+  recipeId?: string;
   name: string;
   description: string;
   type: MealType;
@@ -11,6 +14,8 @@ export type Meal = {
   calories: number;
   tags: string[];
   ingredients: string[];
+  image?: string;
+  source?: MealSource;
 };
 
 export type Product = {

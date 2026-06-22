@@ -8,6 +8,7 @@ import {
   filterRecipesForCriteria,
   getRecipesByMealTypeFromPool,
 } from "@/lib/recipeFilter";
+import { getMealRecipeId } from "@/lib/mealRecipe";
 import {
   buildPlanFromRecipes,
   estimateRecipeTotalCost,
@@ -93,7 +94,7 @@ export function swapMealInPlan(
 ): GeneratedMealPlanResult {
   const recipes = plan.days.flatMap((day) =>
     day.meals
-      .map((meal) => getRecipeById(meal.id))
+      .map((meal) => getRecipeById(getMealRecipeId(meal)))
       .filter((recipe): recipe is Recipe => recipe != null),
   );
 

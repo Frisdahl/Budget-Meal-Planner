@@ -1,4 +1,5 @@
 import type { Product } from "@/types";
+import { logMealPlanDebug } from "@/lib/mealPlanDebug";
 
 export function getEffectivePrice(product: Product): number {
   return product.onSale && product.salePrice != null
@@ -75,8 +76,8 @@ export function findBestProductForIngredient(
 
     const chosen = pickCheapestInStock(candidates);
 
-    if (import.meta.env.DEV && chosen) {
-      console.log("[MealPlan ingredient match]", {
+    if (chosen) {
+      logMealPlanDebug("[MealPlan ingredient match]", {
         ingredient,
         matchedProductName: chosen.name,
         productId: chosen.id,

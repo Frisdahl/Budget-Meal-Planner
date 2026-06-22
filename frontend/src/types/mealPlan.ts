@@ -30,6 +30,7 @@ export type MealPlanSummary = {
   underBudget: boolean;
   mealCount: number;
   averageCostPerDay: number;
+  budgetNotice?: string;
 };
 
 export type MealPlanSource = "placeholder" | "rule-based" | "openai";

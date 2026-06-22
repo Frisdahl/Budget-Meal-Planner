@@ -157,7 +157,7 @@ export function BudgetSummaryCard({
 
         {status === "over" && (
           <Text variant="body-sm" className="text-accent-800">
-            {OVER_BUDGET_MESSAGE}
+            {summary.budgetNotice ?? OVER_BUDGET_MESSAGE}
           </Text>
         )}
 

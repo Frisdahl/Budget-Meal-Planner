@@ -58,6 +58,8 @@ export function setCriteria(criteria: MealPlanCriteria): void {
 }
 
 export async function generatePlan(): Promise<void> {
+  if (state.status === "generating") return;
+
   state = {
     ...state,
     status: "generating",
@@ -110,7 +112,7 @@ export async function makePlanCheaper(): Promise<void> {
 
     const liveItems = getShoppingListItems().map((item) => ({ ...item }));
     const previousTotal = currentPlan.summary.scaledCost;
-    const { plan, applied, message } = optimizePlanForBudget(
+    const { plan, applied, message } = await optimizePlanForBudget(
       { ...currentPlan, shoppingListItems: liveItems },
       products,
     );

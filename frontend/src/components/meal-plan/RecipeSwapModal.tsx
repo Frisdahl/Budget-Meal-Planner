@@ -3,7 +3,8 @@ import { Badge, Button, Modal, Text } from "@/components/ui";
 import { getRecipeById } from "@/data/recipes";
 import { MEAL_TYPE_LABELS } from "@/data/mockMeals";
 import { formatCurrency } from "@/lib/format";
-import { estimateRecipeTotalCost } from "@/lib/recipePlan";
+import { getMealRecipeId } from "@/lib/mealRecipe";
+import { estimateRecipeTotalCost, recipeMealTypeToMealType } from "@/lib/recipePlan";
 import {
   formatRecipeSwapImpact,
   getRecipeAlternativesForMeal,
@@ -14,6 +15,7 @@ import {
 import { fetchProductFeed, toProducts } from "@/services/productFeedService";
 import { getRecipeTagBadgeVariant } from "./badgeUtils";
 import { LoadingSpinner } from "./LoadingSpinner";
+import { MealThumbnail } from "./MealThumbnail";
 import type { GeneratedMealPlanResult } from "@/types/mealPlan";
 import type { Product } from "@/types";
 import { Clock, Users } from "lucide-react";
@@ -69,49 +71,55 @@ function AlternativeCard({
 }: AlternativeCardProps) {
   const { recipe, estimatedCost } = alternative;
   const scaledCost = estimatedCost * people;
+  const mealType = recipeMealTypeToMealType(recipe.mealType);
 
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onSelect(recipe.id)}
-      className="flex w-full flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 text-left transition-all hover:border-brand-300 hover:bg-brand-50/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+      className="swap-recipe-card w-full rounded-xl border border-neutral-200 bg-white p-3 text-left transition-all hover:border-brand-300 hover:bg-brand-50/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60 sm:p-4"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold leading-snug text-neutral-900">
-            {recipe.title}
-          </p>
-          <p className="mt-1 text-caption text-brand-700">
-            {formatRecipeSwapImpact(currentCost, estimatedCost)}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold tabular-nums text-neutral-900">
-            {formatCurrency(scaledCost)}
-          </p>
-          {people > 1 && (
-            <p className="text-caption tabular-nums text-neutral-500">
-              {formatCurrency(estimatedCost)} pr. person
-            </p>
-          )}
+      <MealThumbnail
+        image={recipe.image}
+        mealType={mealType}
+        title={recipe.title}
+      />
+
+      <div className="swap-recipe-card-content min-w-0">
+        <p className="text-[15px] font-semibold leading-snug text-neutral-900">
+          {recipe.title}
+        </p>
+        <p className="mt-1 text-caption text-brand-700">
+          {formatRecipeSwapImpact(currentCost, estimatedCost)}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-caption text-neutral-500">
+            <Clock className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            {recipe.estimatedTimeMinutes} min
+          </span>
+          <span className="inline-flex items-center gap-1 text-caption text-neutral-500">
+            <Users className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            {recipe.servings} pers.
+          </span>
+          {recipe.tags.slice(0, 3).map((tag) => (
+            <Badge key={tag} variant={getRecipeTagBadgeVariant(tag)}>
+              {tag}
+            </Badge>
+          ))}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center gap-1 text-caption text-neutral-500">
-          <Clock className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          {recipe.estimatedTimeMinutes} min
-        </span>
-        <span className="inline-flex items-center gap-1 text-caption text-neutral-500">
-          <Users className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          {recipe.servings} pers.
-        </span>
-        {recipe.tags.slice(0, 3).map((tag) => (
-          <Badge key={tag} variant={getRecipeTagBadgeVariant(tag)}>
-            {tag}
-          </Badge>
-        ))}
+      <div className="swap-recipe-card-price shrink-0 text-right">
+        <p className="text-sm font-semibold tabular-nums text-neutral-900">
+          {formatCurrency(scaledCost)}
+        </p>
+        {people > 1 && (
+          <p className="text-caption tabular-nums text-neutral-500">
+            {formatCurrency(estimatedCost)} pr. person
+          </p>
+        )}
       </div>
     </button>
   );
@@ -156,7 +164,7 @@ export function RecipeSwapModal({
 
         const recipeMealType = mealTypeToRecipeMealType(swapTarget.meal.type);
         const options = getRecipeAlternativesForMeal(
-          swapTarget.meal.id,
+          getMealRecipeId(swapTarget.meal),
           recipeMealType,
           plan.criteria,
           fetchedProducts,
@@ -185,7 +193,7 @@ export function RecipeSwapModal({
     };
   }, [open, target, plan]);
 
-  const currentRecipe = target ? getRecipeById(target.meal.id) : null;
+  const currentRecipe = target ? getRecipeById(getMealRecipeId(target.meal)) : null;
 
   const currentCost = useMemo(() => {
     if (!target || !currentRecipe) return 0;
@@ -234,13 +242,22 @@ export function RecipeSwapModal({
           <p className="text-caption font-medium uppercase tracking-wide text-neutral-500">
             Nuværende opskrift
           </p>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <p className="text-[15px] font-semibold text-neutral-900">
-              {meal.name}
-            </p>
-            <p className="shrink-0 text-sm font-semibold tabular-nums text-neutral-900">
-              {formatCurrency(currentCost * people)}
-            </p>
+          <div className="swap-recipe-card mt-2">
+            <MealThumbnail
+              image={meal.image ?? currentRecipe?.image}
+              mealType={meal.type}
+              title={meal.name}
+            />
+            <div className="swap-recipe-card-content min-w-0">
+              <p className="text-[15px] font-semibold text-neutral-900">
+                {meal.name}
+              </p>
+            </div>
+            <div className="swap-recipe-card-price shrink-0 text-right">
+              <p className="text-sm font-semibold tabular-nums text-neutral-900">
+                {formatCurrency(currentCost * people)}
+              </p>
+            </div>
           </div>
         </div>
 

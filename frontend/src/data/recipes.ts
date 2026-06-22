@@ -9,6 +9,8 @@ export type IngredientUnit =
 
 export type RecipeMealType = "breakfast" | "lunch" | "dinner" | "snack";
 
+export type RecipeSource = "spoonacular" | "local";
+
 export type RecipeIngredient = {
   name: string;
   amount: number;
@@ -19,6 +21,8 @@ export type RecipeIngredient = {
 export type Recipe = {
   id: string;
   title: string;
+  image?: string;
+  source?: RecipeSource;
   servings: number;
   mealType: RecipeMealType;
   estimatedDifficulty?: "easy" | "medium";
@@ -872,12 +876,32 @@ const rawRecipes: RecipeInput[] = [
 
 const recipes: Recipe[] = rawRecipes.map(recipe);
 
-export function getAllRecipes(): Recipe[] {
+const externalRecipes = new Map<string, Recipe>();
+
+export function getLocalRecipes(): Recipe[] {
   return recipes;
 }
 
+export function registerExternalRecipes(nextRecipes: Recipe[]): void {
+  for (const recipe of nextRecipes) {
+    externalRecipes.set(recipe.id, recipe);
+  }
+}
+
+export function clearExternalRecipes(): void {
+  externalRecipes.clear();
+}
+
+export function getAllRecipes(): Recipe[] {
+  const localIds = new Set(recipes.map((recipe) => recipe.id));
+  const external = [...externalRecipes.values()].filter(
+    (recipe) => !localIds.has(recipe.id),
+  );
+  return [...recipes, ...external];
+}
+
 export function getRecipeById(id: string): Recipe | undefined {
-  return recipes.find((recipe) => recipe.id === id);
+  return externalRecipes.get(id) ?? recipes.find((recipe) => recipe.id === id);
 }
 
 export function getRecipesByMealType(mealType: RecipeMealType): Recipe[] {

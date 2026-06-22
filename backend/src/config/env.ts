@@ -9,6 +9,10 @@ const envSchema = z.object({
     .default("https://api.sallinggroup.com/v1"),
   CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  SPOONACULAR_API_KEY: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() : value),
+    z.string().min(1).optional(),
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;
